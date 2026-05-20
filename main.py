@@ -6,6 +6,8 @@ CS / CE / AI internships and tracks your applications.
 """
 
 import argparse
+import os
+import re
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -18,14 +20,53 @@ from rich.prompt import Prompt, Confirm
 
 console = Console()
 
+_ENV_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")
+
+
+def _load_dotenv(path: Path) -> None:
+    if not path.exists():
+        return
+
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
+        if "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+
+        if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+            value = value[1:-1]
+
+        os.environ.setdefault(key, value)
+
+
+def _expand_env_values(value):
+    if isinstance(value, dict):
+        return {key: _expand_env_values(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_expand_env_values(item) for item in value]
+    if isinstance(value, str):
+        return _ENV_PATTERN.sub(lambda match: os.environ.get(match.group(1), ""), value)
+    return value
+
 
 def load_config(path: str = "config.yaml") -> dict:
     cfg_path = Path(path)
     if not cfg_path.exists():
         console.print(f"[red]Config file not found: {path}[/red]")
         sys.exit(1)
+    _load_dotenv(cfg_path.with_name(".env"))
     with open(cfg_path) as f:
-        return yaml.safe_load(f)
+        config = yaml.safe_load(f) or {}
+    return _expand_env_values(config)
 
 
 def cmd_search(args, config: dict):
@@ -227,6 +268,56 @@ def cmd_apply(args, config: dict):
     db.close()
 
 
+def cmd_batch_apply(args, config: dict):
+    """Apply to multiple listings by ID without interactive prompts."""
+    from tracker.database import Database
+    from autofill.filler import AutoFiller
+
+    db = Database()
+    ids = args.ids
+    auto_submit = not args.no_auto_submit
+
+    applied = []
+    skipped = []
+
+    for listing_id in ids:
+        row = db._conn.execute("SELECT * FROM listings WHERE id=?", (listing_id,)).fetchone()
+        if not row:
+            console.print(f"[red]Listing #{listing_id} not found, skipping.[/red]")
+            skipped.append(listing_id)
+            continue
+
+        if row["status"] == "applied":
+            console.print(f"[dim]#{listing_id} already applied, skipping.[/dim]")
+            skipped.append(listing_id)
+            continue
+
+        console.print(f"\n[bold cyan]Applying #{listing_id}:[/bold cyan] {row['title']} @ {row['company']}")
+        console.print(f"  URL: {row['url']}")
+
+        filler = AutoFiller(config)
+        success = filler.fill(row["url"], auto_submit=auto_submit)
+
+        if success:
+            db.update_status(listing_id, "applied", "batch apply")
+            applied.append({"id": listing_id, "title": row["title"], "company": row["company"]})
+            console.print(f"  [green]✓ Applied and tracked.[/green]")
+        else:
+            console.print(f"  [yellow]⚠ Could not complete — marking as reviewed.[/yellow]")
+            db.update_status(listing_id, "reviewed", "batch apply — needs manual follow-up")
+            skipped.append(listing_id)
+
+    db.close()
+
+    console.print("\n[bold]--- Batch Apply Summary ---[/bold]")
+    if applied:
+        console.print(f"[green]Applied ({len(applied)}):[/green]")
+        for a in applied:
+            console.print(f"  #{a['id']} {a['title']} @ {a['company']}")
+    if skipped:
+        console.print(f"[yellow]Skipped ({len(skipped)}): IDs {skipped}[/yellow]")
+
+
 def cmd_daemon(args, config: dict):
     """Run as a background daemon: scan on schedule, send daily digests."""
     import schedule
@@ -290,6 +381,11 @@ def main():
     p_apply = sub.add_parser("apply", help="Auto-fill an application form")
     p_apply.add_argument("id", type=int, help="Listing ID")
     p_apply.set_defaults(func=cmd_apply)
+
+    p_batch = sub.add_parser("batch-apply", help="Apply to multiple listings by ID (no prompts)")
+    p_batch.add_argument("ids", type=int, nargs="+", help="Listing IDs to apply to")
+    p_batch.add_argument("--no-auto-submit", action="store_true", help="Fill forms but don't auto-submit")
+    p_batch.set_defaults(func=cmd_batch_apply)
 
     p_daemon = sub.add_parser("daemon", help="Run as a background scheduler")
     p_daemon.set_defaults(func=cmd_daemon)

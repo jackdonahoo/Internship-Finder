@@ -5,6 +5,10 @@ __pycache__/
 data/*.db
 data/*.csv
 .env
+private/*
+!private/resume/
+private/resume/*
+!private/resume/.gitkeep
 *.egg-info/
 dist/
 build/

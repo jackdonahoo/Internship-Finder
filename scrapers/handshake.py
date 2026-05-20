@@ -25,13 +25,23 @@ class HandshakeScraper(BaseScraper):
         slow_mo = self.config["browser"]["slow_mo"]
         results = []
 
+        from session_manager import load_session
+        session_path = load_session("handshake")
+
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=headless, slow_mo=slow_mo)
-            page = browser.new_context(
-                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-            ).new_page()
             try:
-                self._login(page, creds["email"], creds["password"])
+                browser = p.chromium.launch(channel="chrome", headless=headless, slow_mo=slow_mo)
+            except Exception:
+                browser = p.chromium.launch(headless=headless, slow_mo=slow_mo)
+
+            ctx_kwargs = {"user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
+            if session_path:
+                ctx_kwargs["storage_state"] = session_path
+            ctx = browser.new_context(**ctx_kwargs)
+            page = ctx.new_page()
+            try:
+                if not session_path:
+                    self._login(page, creds["email"], creds["password"])
                 results = self._scrape_search(page, keyword)
             except Exception as e:
                 print(f"[Handshake] Error: {e}")
@@ -43,12 +53,16 @@ class HandshakeScraper(BaseScraper):
     def _login(self, page, email, password):
         page.goto(self.LOGIN_URL, timeout=30000)
         page.wait_for_selector("input[type='email']", timeout=15000)
-        page.fill("input[type='email']", email)
+        page.click("input[type='email']")
+        page.type("input[type='email']", email, delay=50)
+        page.wait_for_selector("button[type='submit']:not([disabled])", timeout=10000)
         page.click("button[type='submit']")
-        page.wait_for_selector("input[type='password']", timeout=10000)
-        page.fill("input[type='password']", password)
+        page.wait_for_selector("input[type='password']", timeout=15000)
+        page.click("input[type='password']")
+        page.type("input[type='password']", password, delay=50)
+        page.wait_for_selector("button[type='submit']:not([disabled])", timeout=10000)
         page.click("button[type='submit']")
-        page.wait_for_url("**/stu/**", timeout=20000)
+        page.wait_for_url("**/stu/**", timeout=30000)
 
     def _scrape_search(self, page, keyword):
         import urllib.parse

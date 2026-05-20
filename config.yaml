@@ -41,16 +41,16 @@ target_companies:
 
 email:
   enabled: false
-  sender_email: "your.email@gmail.com"
-  sender_app_password: "your-gmail-app-password"
-  recipient_email: "your.email@gmail.com"
+  sender_email: "${EMAIL_SENDER_EMAIL}"
+  sender_app_password: "${EMAIL_SENDER_APP_PASSWORD}"
+  recipient_email: "${EMAIL_RECIPIENT_EMAIL}"
   digest_time: "08:00"
 
 profile:
   first_name: "Jack"
   last_name: "Donahoo"
-  email: "jackdonahoo@gmail.com"
-  phone: ""
+  email: "${PROFILE_EMAIL}"
+  phone: "${PROFILE_PHONE}"
   linkedin_url: ""
   github_url: ""
   portfolio_url: ""
@@ -58,7 +58,7 @@ profile:
   major: "Computer Science"
   gpa: ""
   graduation_year: "2027"
-  resume_path: ""
+  resume_path: "${RESUME_PATH}"
 
 browser:
   headless: false
@@ -68,13 +68,13 @@ browser:
 
 linkedin:
   enabled: true
-  email: ""
-  password: ""
+  email: "${LINKEDIN_EMAIL}"
+  password: "${LINKEDIN_PASSWORD}"
 
 indeed:
   enabled: true
 
 handshake:
-  enabled: false
-  email: ""
-  password: ""
+  enabled: true
+  email: "${HANDSHAKE_EMAIL}"
+  password: "${HANDSHAKE_PASSWORD}"
