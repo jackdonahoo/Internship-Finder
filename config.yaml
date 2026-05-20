@@ -1,0 +1,80 @@
+# Internship Finder Configuration
+# Edit this file with your personal settings before running the tool.
+
+search:
+  location: "Austin, TX"
+  keywords:
+    - "Computer Engineering intern"
+    - "Computer Science intern"
+    - "Software Engineering intern"
+    - "AI intern"
+    - "Machine Learning intern"
+    - "Software Developer intern"
+  max_days_old: 30
+  min_score: 40
+
+target_companies:
+  - name: "Dell Technologies"
+    careers_url: "https://jobs.dell.com/search-jobs/intern/Austin%2C-TX/375/4/5344959/32x72541/-97x33122/50/2"
+  - name: "Apple"
+    careers_url: "https://jobs.apple.com/en-us/search?location=austin-AUS&team=internships-STDNT-INTRN"
+  - name: "Google"
+    careers_url: "https://careers.google.com/jobs/results/?location=Austin%2C%20TX%2C%20USA&q=intern"
+  - name: "Amazon"
+    careers_url: "https://www.amazon.jobs/en/search?loc_query=Austin%2C%20Texas%2C%20USA&base_query=intern"
+  - name: "Meta"
+    careers_url: "https://www.metacareers.com/jobs?offices[0]=Austin%2C%20TX&roles[0]=intern"
+  - name: "Tesla"
+    careers_url: "https://www.tesla.com/careers/search/?site=US&type=3"
+  - name: "Oracle"
+    careers_url: "https://careers.oracle.com/jobs/#en/sites/jobsearch/requisitions?keyword=intern&location=Austin"
+  - name: "IBM"
+    careers_url: "https://careers.ibm.com/jobs?field_keyword_08[]=Intern&field_city[]=Austin"
+  - name: "NI (National Instruments)"
+    careers_url: "https://www.ni.com/en/about-ni/careers/job-openings.html"
+  - name: "Samsung Austin"
+    careers_url: "https://www.samsung.com/us/careers/search-jobs/?q=intern&location=Austin"
+  - name: "Indeed HQ"
+    careers_url: "https://careers.indeed.com/jobs?q=intern&l=Austin%2C+TX"
+  - name: "Cloudflare"
+    careers_url: "https://www.cloudflare.com/careers/jobs/?location=Austin%2C+TX&department=Engineering"
+
+email:
+  enabled: false
+  sender_email: "your.email@gmail.com"
+  sender_app_password: "your-gmail-app-password"
+  recipient_email: "your.email@gmail.com"
+  digest_time: "08:00"
+
+profile:
+  first_name: "Jack"
+  last_name: "Donahoo"
+  email: "jackdonahoo@gmail.com"
+  phone: ""
+  linkedin_url: ""
+  github_url: ""
+  portfolio_url: ""
+  university: ""
+  major: "Computer Science"
+  gpa: ""
+  graduation_year: "2027"
+  resume_path: ""
+
+browser:
+  headless: false
+  slow_mo: 50
+  request_delay_min: 2
+  request_delay_max: 5
+
+linkedin:
+  enabled: true
+  email: ""
+  password: ""
+
+indeed:
+  enabled: true
+
+handshake:
+  enabled: false
+  email: ""
+  password: ""
