@@ -4,12 +4,21 @@
 search:
   location: "Austin, TX"
   keywords:
+    - "Software Engineering intern"
+    - "Software Developer intern"
     - "Computer Engineering intern"
     - "Computer Science intern"
-    - "Software Engineering intern"
+    - "Backend Engineer intern"
+    - "Frontend Engineer intern"
+    - "Full Stack intern"
+    - "DevOps intern"
+    - "Cloud Engineer intern"
+    - "Data Engineer intern"
+    - "Embedded Software intern"
+    - "Systems Engineer intern"
     - "AI intern"
     - "Machine Learning intern"
-    - "Software Developer intern"
+    - "Cybersecurity intern"
   max_days_old: 30
   min_score: 40
 
@@ -22,22 +31,37 @@ target_companies:
     careers_url: "https://careers.google.com/jobs/results/?location=Austin%2C%20TX%2C%20USA&q=intern"
   - name: "Amazon"
     careers_url: "https://www.amazon.jobs/en/search?loc_query=Austin%2C%20Texas%2C%20USA&base_query=intern"
-  - name: "Meta"
-    careers_url: "https://www.metacareers.com/jobs?offices[0]=Austin%2C%20TX&roles[0]=intern"
-  - name: "Tesla"
-    careers_url: "https://www.tesla.com/careers/search/?site=US&type=3"
   - name: "Oracle"
     careers_url: "https://careers.oracle.com/jobs/#en/sites/jobsearch/requisitions?keyword=intern&location=Austin"
-  - name: "IBM"
-    careers_url: "https://careers.ibm.com/jobs?field_keyword_08[]=Intern&field_city[]=Austin"
-  - name: "NI (National Instruments)"
-    careers_url: "https://www.ni.com/en/about-ni/careers/job-openings.html"
-  - name: "Samsung Austin"
-    careers_url: "https://www.samsung.com/us/careers/search-jobs/?q=intern&location=Austin"
-  - name: "Indeed HQ"
-    careers_url: "https://careers.indeed.com/jobs?q=intern&l=Austin%2C+TX"
   - name: "Cloudflare"
     careers_url: "https://www.cloudflare.com/careers/jobs/?location=Austin%2C+TX&department=Engineering"
+  - name: "Silicon Labs"
+    careers_url: "https://www.silabs.com/about-us/careers/job-search?q=intern&l=Austin"
+  - name: "Cirrus Logic"
+    careers_url: "https://careers.cirrus.com/jobs?q=intern&location=Austin%2C+TX"
+  - name: "Q2 Holdings"
+    careers_url: "https://www.q2.com/company/careers/open-positions?q=intern"
+  - name: "Match Group"
+    careers_url: "https://jobs.matchgroup.com/?q=intern&location=austin"
+  - name: "WP Engine"
+    careers_url: "https://job-boards.greenhouse.io/wpengine?q=intern"
+  - name: "BigCommerce"
+    careers_url: "https://careers.bigcommerce.com/jobs?q=intern"
+  - name: "Bumble"
+    careers_url: "https://team.bumble.com/en/vacancies?location=austin"
+  - name: "PayPal"
+    careers_url: "https://jobs.paypal.com/en/search?location=Austin%2C%20Texas&q=intern"
+  - name: "NXP Semiconductors"
+    careers_url: "https://nxp.wd3.myworkdayjobs.com/careers?q=intern&locations=0c38ee67a8be01905b8d7e4d798ca909"
+  - name: "Charles Schwab"
+    careers_url: "https://schwab.wd5.myworkdayjobs.com/Schwab?q=intern&locations=84b2f6dfba96013a48dfabf838d14c5e"
+
+greenhouse_boards:
+  - { slug: "cloudflare",      name: "Cloudflare" }
+  - { slug: "solarwinds",      name: "SolarWinds" }
+
+lever_boards:
+  - { slug: "bazaarvoice",     name: "Bazaarvoice" }
 
 email:
   enabled: false
@@ -75,6 +99,6 @@ indeed:
   enabled: true
 
 handshake:
-  enabled: true
+  enabled: false  # re-enable once TTU career center approves your account
   email: "${HANDSHAKE_EMAIL}"
   password: "${HANDSHAKE_PASSWORD}"

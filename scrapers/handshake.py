@@ -74,9 +74,26 @@ class HandshakeScraper(BaseScraper):
             "sort_column": "created_at",
         })
         page.goto(f"https://app.joinhandshake.com/stu/postings?{params}", timeout=30000)
+
+        # Detect account permission errors before waiting for job cards
         try:
-            page.wait_for_selector("[data-hook='posting-card']", timeout=15000)
+            page.wait_for_selector(
+                "[data-hook='posting-card'], [class*='permission'], [class*='error'], h1",
+                timeout=15000,
+            )
         except PWTimeout:
+            return []
+
+        page_text = page.inner_text("body")
+        if "do not have permission" in page_text.lower() or "contact the handshake team" in page_text.lower():
+            print(
+                "[Handshake] Account permission error — your TTU Handshake account may need "
+                "career center approval or profile completion before you can view job postings. "
+                "Log in at app.joinhandshake.com and check for any pending setup steps."
+            )
+            return []
+
+        if not page.query_selector("[data-hook='posting-card']"):
             return []
 
         results = []

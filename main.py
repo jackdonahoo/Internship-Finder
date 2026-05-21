@@ -75,6 +75,7 @@ def cmd_search(args, config: dict):
     from scrapers.linkedin import LinkedInScraper
     from scrapers.handshake import HandshakeScraper
     from scrapers.companies import CompanyScraper
+    from scrapers.ats import GreenhouseScraper, LeverScraper
     from tracker.database import Database
     from notifier.email_digest import send_digest
 
@@ -106,6 +107,20 @@ def cmd_search(args, config: dict):
     listings = scraper.scrape_all_companies()
     new_count = _upsert_listings(db, listings)
     console.print(f"  Company pages: {len(listings)} found, [green]{new_count} new[/green]")
+
+    if config.get("greenhouse_boards"):
+        console.print("[cyan]Scanning Greenhouse boards...[/cyan]")
+        gh = GreenhouseScraper(config)
+        listings = gh.search_all_boards()
+        new_count = _upsert_listings(db, listings)
+        console.print(f"  Greenhouse: {len(listings)} found, [green]{new_count} new[/green]")
+
+    if config.get("lever_boards"):
+        console.print("[cyan]Scanning Lever boards...[/cyan]")
+        lv = LeverScraper(config)
+        listings = lv.search_all_boards()
+        new_count = _upsert_listings(db, listings)
+        console.print(f"  Lever: {len(listings)} found, [green]{new_count} new[/green]")
 
     recent = db.get_new_since(datetime.now() - timedelta(hours=1))
     if config.get("email", {}).get("enabled") and recent:
@@ -269,53 +284,54 @@ def cmd_apply(args, config: dict):
 
 
 def cmd_batch_apply(args, config: dict):
-    """Apply to multiple listings by ID without interactive prompts."""
+    """Open all matching listings in Chrome and track them once you confirm."""
+    import subprocess
+    import time
     from tracker.database import Database
-    from autofill.filler import AutoFiller
 
     db = Database()
     ids = args.ids
-    auto_submit = not args.no_auto_submit
 
-    applied = []
-    skipped = []
-
+    rows = []
     for listing_id in ids:
         row = db._conn.execute("SELECT * FROM listings WHERE id=?", (listing_id,)).fetchone()
         if not row:
-            console.print(f"[red]Listing #{listing_id} not found, skipping.[/red]")
-            skipped.append(listing_id)
+            console.print(f"[red]#{listing_id} not found, skipping.[/red]")
             continue
-
         if row["status"] == "applied":
             console.print(f"[dim]#{listing_id} already applied, skipping.[/dim]")
-            skipped.append(listing_id)
             continue
+        rows.append(row)
 
-        console.print(f"\n[bold cyan]Applying #{listing_id}:[/bold cyan] {row['title']} @ {row['company']}")
-        console.print(f"  URL: {row['url']}")
+    if not rows:
+        console.print("[yellow]Nothing to apply to.[/yellow]")
+        db.close()
+        return
 
-        filler = AutoFiller(config)
-        success = filler.fill(row["url"], auto_submit=auto_submit)
+    console.print(f"\n[bold cyan]Opening {len(rows)} job(s) in Chrome...[/bold cyan]\n")
+    for row in rows:
+        console.print(f"  #{row['id']} [bold]{row['title']}[/bold] @ {row['company']}")
+        console.print(f"       {row['url']}")
+        subprocess.run(["open", row["url"]], check=False)
+        time.sleep(0.8)  # stagger tab opens slightly
 
-        if success:
-            db.update_status(listing_id, "applied", "batch apply")
-            applied.append({"id": listing_id, "title": row["title"], "company": row["company"]})
-            console.print(f"  [green]✓ Applied and tracked.[/green]")
-        else:
-            console.print(f"  [yellow]⚠ Could not complete — marking as reviewed.[/yellow]")
-            db.update_status(listing_id, "reviewed", "batch apply — needs manual follow-up")
-            skipped.append(listing_id)
+    console.print(f"\n[green]All {len(rows)} tabs opened.[/green]")
+    console.print("Apply to each one in Chrome (Easy Apply or external form), then come back here.\n")
+
+    applied = []
+    for row in rows:
+        answer = Confirm.ask(f"Did you apply to [bold]{row['title']}[/bold] @ {row['company']}?", default=True)
+        if answer:
+            db.update_status(row["id"], "applied", "batch apply")
+            applied.append(row)
 
     db.close()
 
-    console.print("\n[bold]--- Batch Apply Summary ---[/bold]")
+    console.print(f"\n[bold green]--- Applications Submitted ---[/bold green]")
     if applied:
-        console.print(f"[green]Applied ({len(applied)}):[/green]")
         for a in applied:
-            console.print(f"  #{a['id']} {a['title']} @ {a['company']}")
-    if skipped:
-        console.print(f"[yellow]Skipped ({len(skipped)}): IDs {skipped}[/yellow]")
+            console.print(f"  ✓ #{a['id']} {a['title']} @ {a['company']}")
+    console.print(f"\n[bold]{len(applied)}/{len(rows)} tracked as applied.[/bold]")
 
 
 def cmd_daemon(args, config: dict):
@@ -382,9 +398,8 @@ def main():
     p_apply.add_argument("id", type=int, help="Listing ID")
     p_apply.set_defaults(func=cmd_apply)
 
-    p_batch = sub.add_parser("batch-apply", help="Apply to multiple listings by ID (no prompts)")
+    p_batch = sub.add_parser("batch-apply", help="Open listings in Chrome and track applications")
     p_batch.add_argument("ids", type=int, nargs="+", help="Listing IDs to apply to")
-    p_batch.add_argument("--no-auto-submit", action="store_true", help="Fill forms but don't auto-submit")
     p_batch.set_defaults(func=cmd_batch_apply)
 
     p_daemon = sub.add_parser("daemon", help="Run as a background scheduler")

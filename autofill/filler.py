@@ -36,27 +36,14 @@ class AutoFiller:
             print("[AutoFill] Playwright not installed.")
             return False
 
-        from session_manager import load_session
-
         with sync_playwright() as p:
-            try:
-                browser = p.chromium.launch(channel="chrome", headless=self.headless, slow_mo=self.slow_mo)
-            except Exception:
-                browser = p.chromium.launch(headless=self.headless, slow_mo=self.slow_mo)
-
-            ctx_kwargs = {
-                "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-            if "linkedin.com" in url:
-                session_path = load_session("linkedin")
-                if session_path:
-                    ctx_kwargs["storage_state"] = session_path
-
-            ctx = browser.new_context(**ctx_kwargs)
+            ctx = self._launch_chrome_context(p)
             page = ctx.new_page()
             try:
+                original_url = url
                 page.goto(url, timeout=30000)
-                page.wait_for_load_state("networkidle", timeout=20000)
+                page.wait_for_load_state("domcontentloaded", timeout=20000)
+                page.wait_for_timeout(3000)  # let JS render after DOM load
 
                 # Follow through LinkedIn job pages to the real application
                 if "linkedin.com/jobs" in url:
@@ -65,8 +52,16 @@ class AutoFiller:
                         print("[AutoFill] Could not reach application form from LinkedIn.")
                         return False
 
-                ats = next((k for k, v in ATS_PATTERNS.items() if v in page.url), None)
-                print(f"[AutoFill] ATS: {ats or 'generic'} | URL: {page.url[:80]}")
+                # After LinkedIn navigation the active page may be a popup
+                active_page = page
+                for p_ctx in ctx.pages:
+                    if p_ctx.url != original_url and p_ctx != page:
+                        active_page = p_ctx
+                        break
+
+                ats = next((k for k, v in ATS_PATTERNS.items() if v in active_page.url), None)
+                is_easy_apply = "linkedin.com" in active_page.url
+                print(f"[AutoFill] ATS: {'linkedin-easy-apply' if is_easy_apply else (ats or 'generic')} | URL: {active_page.url[:80]}")
 
                 handlers = {
                     "workday": self._fill_workday,
@@ -74,11 +69,14 @@ class AutoFiller:
                     "lever": self._fill_lever,
                     "ashby": self._fill_ashby,
                 }
-                success = handlers.get(ats, self._fill_generic)(page)
+                if is_easy_apply:
+                    success = self._fill_linkedin_easy_apply(active_page)
+                else:
+                    success = handlers.get(ats, self._fill_generic)(active_page)
 
                 if success:
                     if auto_submit:
-                        submitted = self._try_submit(page)
+                        submitted = self._try_submit(active_page)
                         if submitted:
                             print("[AutoFill] Form submitted.")
                         else:
@@ -97,38 +95,88 @@ class AutoFiller:
                 print(f"[AutoFill] Error: {e}")
                 return False
             finally:
-                browser.close()
+                ctx.close()
+
+    def _launch_chrome_context(self, p):
+        """Launch Chrome with the user's real profile so Google/LinkedIn sessions work."""
+        import os, shutil, tempfile
+        chrome_profile = os.path.expanduser("~/Library/Application Support/Google/Chrome")
+        if os.path.isdir(chrome_profile):
+            # Copy Default profile to a temp dir so we don't conflict with a running Chrome
+            tmp = tempfile.mkdtemp(prefix="pw_chrome_")
+            default_src = os.path.join(chrome_profile, "Default")
+            default_dst = os.path.join(tmp, "Default")
+            if os.path.isdir(default_src):
+                shutil.copytree(default_src, default_dst, ignore=shutil.ignore_patterns(
+                    "Cache", "Code Cache", "GPUCache", "ShaderCache",
+                    "Service Worker", "CacheStorage", "IndexedDB",
+                ))
+            try:
+                return p.chromium.launch_persistent_context(
+                    user_data_dir=tmp,
+                    channel="chrome",
+                    headless=self.headless,
+                    slow_mo=self.slow_mo,
+                    args=["--disable-blink-features=AutomationControlled"],
+                )
+            except Exception as e:
+                print(f"[AutoFill] Chrome profile launch failed ({e}), falling back.")
+
+        # Fallback: plain Chromium
+        browser = p.chromium.launch(headless=self.headless, slow_mo=self.slow_mo)
+        return browser.new_context()
 
     def _navigate_linkedin(self, page: "Page", original_url: str) -> str:
         """Click Apply on a LinkedIn job page and follow to the real application form."""
         try:
-            # Try "Easy Apply" (LinkedIn's own form — needs login, skip)
-            # Try external "Apply" button that opens company ATS
-            apply_btn = page.locator(
-                "a.apply-button, a[data-tracking-control-name='public_jobs_apply-link-offsite_sign-up-modal'], "
-                "button.apply-button, a[href*='apply'], .jobs-apply-button"
-            ).first
+            # Logged-in LinkedIn job page selectors (tried in order)
+            apply_selectors = [
+                # External apply (opens company ATS)
+                "a.jobs-apply-button",
+                "a[data-job-id][href*='apply']",
+                "a[href*='linkedin.com/job-apply']",
+                # Easy Apply button (LinkedIn's own flow)
+                "button.jobs-apply-button",
+                ".jobs-apply-button",
+                # Fallback: any visible Apply/Easy Apply button
+                "button:has-text('Easy Apply')",
+                "button:has-text('Apply')",
+                "a:has-text('Apply')",
+            ]
 
-            if apply_btn.count() == 0:
-                # Try clicking "Apply" text on the page
-                apply_btn = page.get_by_role("link", name="Apply").first
+            apply_btn = None
+            for sel in apply_selectors:
+                candidate = page.locator(sel).first
+                try:
+                    if candidate.count() > 0 and candidate.is_visible(timeout=1000):
+                        apply_btn = candidate
+                        print(f"[AutoFill/LinkedIn] Found apply button via: {sel}")
+                        break
+                except Exception:
+                    continue
 
-            if apply_btn.count() > 0 and apply_btn.is_visible():
-                with page.expect_popup(timeout=10000) as popup_info:
-                    apply_btn.click()
-                popup = popup_info.value
-                popup.wait_for_load_state("networkidle", timeout=20000)
-                # Bring popup into main page context
-                page.close()
-                return popup.url
-            else:
+            if not apply_btn:
                 print("[AutoFill] No external Apply button found on LinkedIn page.")
                 return ""
-        except PWTimeout:
-            # No popup — might have navigated in same tab
-            if page.url != original_url:
-                return page.url
-            return ""
+
+            # Check if it opens a popup (external ATS) or navigates in-page (Easy Apply)
+            try:
+                with page.expect_popup(timeout=8000) as popup_info:
+                    apply_btn.click()
+                popup = popup_info.value
+                popup.wait_for_load_state("domcontentloaded", timeout=20000)
+                popup.wait_for_timeout(2000)
+                return popup.url
+            except PWTimeout:
+                # No popup — either navigated in-tab or opened Easy Apply modal
+                page.wait_for_timeout(2000)
+                if page.url != original_url:
+                    return page.url
+                # Easy Apply modal opened in-page — treat current page as form
+                if page.locator(".jobs-easy-apply-modal, [data-test-modal]").count() > 0:
+                    print("[AutoFill/LinkedIn] Easy Apply modal detected — filling inline.")
+                    return page.url
+                return ""
         except Exception as e:
             print(f"[AutoFill/LinkedIn] {e}")
             return ""
@@ -144,6 +192,30 @@ class AutoFiller:
             except Exception:
                 continue
         return False
+
+    def _fill_linkedin_easy_apply(self, page: "Page") -> bool:
+        """Fill LinkedIn Easy Apply modal — handles contact info step and resume upload."""
+        p = self.profile
+        try:
+            modal = page.locator(".jobs-easy-apply-modal, [data-test-modal], [role='dialog']").first
+            if modal.count() == 0:
+                return self._fill_generic(page)
+
+            # Phone field (LinkedIn often pre-fills name/email from your profile)
+            self._safe_fill(page, "input[id*='phoneNumber'], input[name*='phone']", p.get("phone", ""))
+
+            # Resume upload
+            resume = p.get("resume_path", "")
+            if resume and Path(resume).exists():
+                upload = page.locator("input[type='file']").first
+                if upload.count() > 0:
+                    upload.set_input_files(resume)
+                    page.wait_for_timeout(1500)
+
+            return True
+        except Exception as e:
+            print(f"[AutoFill/LinkedIn-EasyApply] {e}")
+            return False
 
     def _fill_workday(self, page: "Page") -> bool:
         p = self.profile
