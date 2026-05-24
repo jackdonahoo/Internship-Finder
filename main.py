@@ -85,41 +85,41 @@ def cmd_search(args, config: dict):
         console.print("[cyan]Scanning Indeed...[/cyan]")
         scraper = IndeedScraper(config)
         listings = scraper.search_all()
-        new_count = _upsert_listings(db, listings)
+        new_count = _upsert_listings(db, listings, config)
         console.print(f"  Indeed: {len(listings)} found, [green]{new_count} new[/green]")
 
     if config.get("linkedin", {}).get("enabled", True):
         console.print("[cyan]Scanning LinkedIn...[/cyan]")
         scraper = LinkedInScraper(config)
         listings = scraper.search_all()
-        new_count = _upsert_listings(db, listings)
+        new_count = _upsert_listings(db, listings, config)
         console.print(f"  LinkedIn: {len(listings)} found, [green]{new_count} new[/green]")
 
     if config.get("handshake", {}).get("enabled", False):
         console.print("[cyan]Scanning Handshake...[/cyan]")
         scraper = HandshakeScraper(config)
         listings = scraper.search_all()
-        new_count = _upsert_listings(db, listings)
+        new_count = _upsert_listings(db, listings, config)
         console.print(f"  Handshake: {len(listings)} found, [green]{new_count} new[/green]")
 
     console.print("[cyan]Scanning company career pages...[/cyan]")
     scraper = CompanyScraper(config)
     listings = scraper.scrape_all_companies()
-    new_count = _upsert_listings(db, listings)
+    new_count = _upsert_listings(db, listings, config)
     console.print(f"  Company pages: {len(listings)} found, [green]{new_count} new[/green]")
 
     if config.get("greenhouse_boards"):
         console.print("[cyan]Scanning Greenhouse boards...[/cyan]")
         gh = GreenhouseScraper(config)
         listings = gh.search_all_boards()
-        new_count = _upsert_listings(db, listings)
+        new_count = _upsert_listings(db, listings, config)
         console.print(f"  Greenhouse: {len(listings)} found, [green]{new_count} new[/green]")
 
     if config.get("lever_boards"):
         console.print("[cyan]Scanning Lever boards...[/cyan]")
         lv = LeverScraper(config)
         listings = lv.search_all_boards()
-        new_count = _upsert_listings(db, listings)
+        new_count = _upsert_listings(db, listings, config)
         console.print(f"  Lever: {len(listings)} found, [green]{new_count} new[/green]")
 
     recent = db.get_new_since(datetime.now() - timedelta(hours=1))
@@ -360,9 +360,21 @@ def cmd_daemon(args, config: dict):
         console.print("\n[yellow]Daemon stopped.[/yellow]")
 
 
-def _upsert_listings(db, listings) -> int:
+def _matches_season_filter(title: str, config: dict) -> bool:
+    """Return False if the listing title matches any excluded pattern."""
+    import re
+    title_lower = title.lower()
+    for pattern in config.get("search", {}).get("exclude_title_patterns", []):
+        if re.search(pattern, title_lower):
+            return False
+    return True
+
+
+def _upsert_listings(db, listings, config: dict = None) -> int:
     new_count = 0
     for listing in listings:
+        if config and not _matches_season_filter(listing.title, config):
+            continue
         _, is_new = db.upsert(listing)
         if is_new:
             new_count += 1
