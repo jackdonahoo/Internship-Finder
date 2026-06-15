@@ -6,8 +6,6 @@ CS / CE / AI internships and tracks your applications.
 """
 
 import argparse
-import os
-import re
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -20,53 +18,14 @@ from rich.prompt import Prompt, Confirm
 
 console = Console()
 
-_ENV_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")
-
-
-def _load_dotenv(path: Path) -> None:
-    if not path.exists():
-        return
-
-    for raw_line in path.read_text().splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[len("export "):].strip()
-        if "=" not in line:
-            continue
-
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        if not key:
-            continue
-
-        if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
-            value = value[1:-1]
-
-        os.environ.setdefault(key, value)
-
-
-def _expand_env_values(value):
-    if isinstance(value, dict):
-        return {key: _expand_env_values(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_expand_env_values(item) for item in value]
-    if isinstance(value, str):
-        return _ENV_PATTERN.sub(lambda match: os.environ.get(match.group(1), ""), value)
-    return value
-
 
 def load_config(path: str = "config.yaml") -> dict:
     cfg_path = Path(path)
     if not cfg_path.exists():
         console.print(f"[red]Config file not found: {path}[/red]")
         sys.exit(1)
-    _load_dotenv(cfg_path.with_name(".env"))
     with open(cfg_path) as f:
-        config = yaml.safe_load(f) or {}
-    return _expand_env_values(config)
+        return yaml.safe_load(f)
 
 
 def cmd_search(args, config: dict):
